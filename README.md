@@ -1,4 +1,4 @@
-# guacamole
+# Maxpanel
 
 Web panel for scanning IP ranges for open ports with [masscan](https://github.com/robertdavidgraham/masscan) and, optionally, querying the results as Minecraft servers (Server List Ping).
 
