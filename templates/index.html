@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <title>MaxPanel</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="icon" href="static/favicon.ico" type="image/x-icon">
+    <style>
+      .fade-in { animation: fade-in .5s cubic-bezier(.4,0,.2,1) both; }
+      @keyframes fade-in { from{opacity:0;} to{opacity:1;} }
+    </style>
+</head>
+<body class="bg-gray-900 text-white min-h-screen flex flex-col items-center justify-center px-4 py-8">
+  <div class="w-full max-w-2xl bg-gray-800 rounded-2xl shadow-xl p-8">
+    <h2 class="text-2xl font-bold mb-4 text-center text-yellow-400">MaxPanel <span class="text-gray-400 font-normal text-lg">Minecraft Edition</span></h2>
+    <form id="scanForm" enctype="multipart/form-data" class="space-y-5 mb-3">
+      <div>
+        <label class="block text-sm mb-1">IP Range (opzionale)</label>
+        <input type="text" name="ip" placeholder="192.168.1.0/24 o 1.1.1.1"
+          class="w-full bg-gray-700 p-2 rounded-lg focus:ring-yellow-500">
+      </div>
+      <div class="text-center text-gray-400">— OPPURE —</div>
+      <div>
+        <label class="block text-sm mb-1">Carica File IP (.txt una riga)</label>
+        <input type="file" name="file" accept=".txt"
+          class="w-full bg-gray-700 p-2 rounded-lg">
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm mb-1">Porte</label>
+          <input type="text" name="ports" value="25565" required
+            class="w-full bg-gray-700 p-2 rounded-lg">
+        </div>
+        <div>
+          <label class="block text-sm mb-1">Rate (pacchetti/sec)</label>
+          <input type="number" name="rate" value="500000" required
+            class="w-full bg-gray-700 p-2 rounded-lg">
+        </div>
+      </div>
+      <div class="flex items-center">
+        <input type="checkbox" id="checker" name="checker" class="h-4 w-4 text-yellow-500 bg-gray-700 rounded focus:ring-yellow-500">
+        <label for="checker" class="ml-2 text-sm">Usa Minecraft Checker</label>
+      </div>
+      <button type="submit" id="submitBtn"
+        class="w-full py-3 bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-bold rounded-lg transition duration-200">Avvia Scansione</button>
+    </form>
+    <div class="mb-2">
+      <button type="button" id="historyBtn" class="py-2 px-4 bg-indigo-600 hover:bg-indigo-700 rounded-lg text-white font-bold">Visualizza History Scansioni</button>
+    </div>
+    <div id="loadingDiv" class="hidden mt-4 p-4 bg-gray-700 rounded-lg text-center">
+      <div class="flex flex-col items-center">
+        <svg class="animate-spin h-7 w-7 text-yellow-400 mb-2" viewBox="0 0 50 50">
+          <circle cx="25" cy="25" r="20" stroke="#DDD" stroke-width="5" fill="none" stroke-dasharray="90" stroke-dashoffset="0"/>
+        </svg>
+        <div class="w-full bg-gray-600 rounded-full h-2.5">
+          <div id="progressBar" class="bg-yellow-500 h-2.5 rounded-full" style="width: 0%"></div>
+        </div>
+        <p id="progressValue" class="mt-2 text-sm text-yellow-400">0%</p>
+        <p id="statusMessage" class="mt-2 text-lg">Avvio Scansione...</p>
+      </div>
+    </div>
+    <div id="errorContainer" class="hidden mt-4 p-4 bg-red-800 border border-red-600 rounded-lg">
+      <p class="font-bold text-red-300">Errore Scan:</p>
+      <p id="errorMessage" class="text-sm mt-1"></p>
+    </div>
+    <div id="resultsContainer" class="hidden mt-4 fade-in">
+      <div class="mb-3 flex items-center">
+        <input type="text" id="filterInput" class="mr-2 p-2 rounded-lg bg-gray-700" placeholder="Filtro IP/Port/MOTD...">
+        <button id="exportCSVBtn" class="px-3 py-2 ml-2 bg-green-600 hover:bg-green-700 rounded-lg font-bold">Esporta CSV</button>
+        <button id="exportTXTBtn" class="px-3 py-2 ml-2 bg-blue-600 hover:bg-blue-700 rounded-lg font-bold">Esporta TXT</button>
+        <button id="exportJSONBtn" class="px-3 py-2 ml-2 bg-yellow-500 hover:bg-yellow-600 rounded-lg font-bold">Esporta JSON</button>
+      </div>
+      <div class="overflow-x-auto">
+        <table id="resultsTable" class="min-w-full bg-gray-900 border border-gray-700 rounded-lg">
+          <thead>
+            <tr>
+              <th class="py-2 px-3 text-left font-bold">IP</th>
+              <th class="py-2 px-3 text-left font-bold">Port</th>
+              <th class="py-2 px-3 text-left font-bold">Risultato</th>
+              <th class="py-2 px-3 font-bold">Dettagli</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div id="modalDetail" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-gray-800 rounded-xl p-6 max-w-lg w-full">
+          <div id="modalContent"></div>
+          <button class="mt-4 px-4 py-2 bg-red-700 text-white rounded-lg font-bold float-right" onclick="document.getElementById('modalDetail').classList.add('hidden');">Chiudi</button>
+        </div>
+      </div>
+    </div>
+    <div id="historyContainer" class="hidden mt-4 p-3 bg-gray-800 rounded-lg fade-in">
+      <h3 class="font-bold mb-1 text-indigo-300">Ultime scansioni</h3>
+      <canvas id="scanChart" width="500" height="220"></canvas>
+      <ul id="historyList"></ul>
+      <button class="mt-3 px-4 py-2 bg-gray-700 hover:bg-gray-900 rounded-lg font-bold" onclick="document.getElementById('historyContainer').classList.add('hidden');">Chiudi</button>
+    </div>
+  </div>
+  <script>
+    let jobData = [];
+    function escapeHTML(str) {
+      if (!str) return "";
+      return String(str).replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+    let scanChartObj = null;
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const form = document.getElementById('scanForm');
+      const submitBtn = document.getElementById('submitBtn');
+      const loadingDiv = document.getElementById('loadingDiv');
+      const progressBar = document.getElementById('progressBar');
+      const progressValue = document.getElementById('progressValue');
+      const statusMessage = document.getElementById('statusMessage');
+      const resultsContainer = document.getElementById('resultsContainer');
+      const resultsTable = document.getElementById('resultsTable').querySelector('tbody');
+      const filterInput = document.getElementById('filterInput');
+      const errorContainer = document.getElementById('errorContainer');
+      const errorMessage = document.getElementById('errorMessage');
+      const modalDetail = document.getElementById('modalDetail');
+      const modalContent = document.getElementById('modalContent');
+      const historyBtn = document.getElementById('historyBtn');
+      const historyContainer = document.getElementById('historyContainer');
+      const historyList = document.getElementById('historyList');
+      const scanChart = document.getElementById('scanChart');
+      const exportCSVBtn = document.getElementById('exportCSVBtn');
+      const exportTXTBtn = document.getElementById('exportTXTBtn');
+      const exportJSONBtn = document.getElementById('exportJSONBtn');
+      let currentInterval = null;
+      let lastScanId = null;
+
+      form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        if (currentInterval) clearInterval(currentInterval);
+        errorContainer.classList.add("hidden");
+        resultsContainer.classList.add("hidden");
+        loadingDiv.classList.remove("hidden");
+        submitBtn.disabled = true;
+        progressBar.style.width = '0%';
+        progressValue.innerText = '0%';
+        statusMessage.innerText = 'Avvio Scansione...';
+
+        const formData = new FormData(form);
+        const ip = formData.get('ip').trim();
+        const file = formData.get('file');
+        if (!ip && (!file || file.size === 0 || file.name === "")) {
+          showError("Inserisci un IP/range o carica un file valido.");
+          return;
+        }
+
+        fetch('/scan', {
+          method: 'POST',
+          body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+          if (data.status === 'ok' && data.scan_id) {
+            lastScanId = data.scan_id;
+            startPoll(data.scan_id);
+          } else {
+            showError(data.message || "Errore sconosciuto nell'avvio scan.");
+          }
+        })
+        .catch(err => {
+          showError(err);
+        });
+      });
+
+      function startPoll(scanId) {
+        currentInterval = setInterval(() => {
+          fetch(`/progress/${scanId}`)
+            .then(response => response.json())
+            .then(job => {
+              progressBar.style.width = `${job.progress}%`;
+              progressValue.innerText = `${job.progress}%`;
+              statusMessage.innerText = job.message || 'In elaborazione...';
+              if (job.status === "completed") {
+                clearInterval(currentInterval);
+                finishScan(scanId);
+              } else if (job.status === "error") {
+                clearInterval(currentInterval);
+                showError(job.result);
+              }
+            })
+            .catch(err => {
+              clearInterval(currentInterval);
+              showError("Errore durante il controllo stato: " + err);
+            });
+        }, 1000);
+      }
+
+      function finishScan(scanId) {
+        loadingDiv.classList.add("hidden");
+        submitBtn.disabled = false;
+        fetch(`/output/output_${scanId}.json`)
+          .then(response => response.json())
+          .then(data => {
+            jobData = data;
+            showResults(jobData);
+            resultsContainer.classList.remove("hidden");
+          })
+          .catch(err => {
+            showError("Scan completato ma " + err);
+          });
+      }
+
+      function showError(msg) {
+        if (currentInterval) clearInterval(currentInterval);
+        loadingDiv.classList.add("hidden");
+        submitBtn.disabled = false;
+        errorMessage.innerText = String(msg);
+        errorContainer.classList.remove("hidden");
+      }
+
+      function showResults(data) {
+        resultsTable.innerHTML = "";
+        filterInput.value = "";
+        data.forEach((row, idx) => {
+          let tr = document.createElement("tr");
+          tr.className = "border-b border-gray-700";
+          tr.innerHTML = `
+            <td class="py-2 px-3">${escapeHTML(row.ip)}</td>
+            <td class="py-2 px-3">${escapeHTML(row.port)}</td>
+            <td class="py-2 px-3">${escapeHTML(row.result).slice(0, 50)}${row.result.length > 50 ? '...' : ''}</td>
+            <td class="py-2 px-3 text-center">
+              <button class="bg-gray-600 hover:bg-gray-700 px-2 py-1 rounded-lg font-bold" 
+                onclick="showDetailModal(${idx})">Dettagli</button>
+            </td>`;
+          resultsTable.appendChild(tr);
+        });
+      }
+
+      filterInput.addEventListener('input', function() {
+        let filter = this.value.toLowerCase();
+        let filtered = jobData.filter(row =>
+          row.ip.toLowerCase().includes(filter) ||
+          row.port.toString().includes(filter) ||
+          (row.result && row.result.toLowerCase().includes(filter))
+        );
+        showResults(filtered);
+      });
+
+      window.showDetailModal = function(idx) {
+        let row = jobData[idx];
+        let iconHTML = "";
+        if (row.result && row.result.includes("favicon:")) {
+          let faviconMatch = row.result.match(/data:image\/png;base64,([a-zA-Z0-9+/=]+)/);
+          if (faviconMatch) {
+            iconHTML = `<img src="data:image/png;base64,${faviconMatch[1]}" class="mb-2" style="max-width:96px;">`;
+          }
+        }
+        modalContent.innerHTML = `
+          ${iconHTML}
+          <div><strong>IP:</strong> ${escapeHTML(row.ip)}</div>
+          <div><strong>Porta:</strong> ${escapeHTML(row.port)}</div>
+          <div><strong>Risultato:</strong> <span class="text-green-500">${escapeHTML(row.result)}</span></div>
+        `;
+        modalDetail.classList.remove("hidden");
+      };
+
+      exportCSVBtn.addEventListener("click", () => {
+        if(lastScanId) window.location.href = `/export/${lastScanId}/csv`;
+      });
+      exportTXTBtn.addEventListener("click", () => {
+        if(lastScanId) window.location.href = `/export/${lastScanId}/txt`;
+      });
+      exportJSONBtn.addEventListener("click", () => {
+        if(lastScanId) window.location.href = `/export/${lastScanId}/json`;
+      });
+
+      historyBtn.addEventListener("click", () => {
+        fetch("/history")
+          .then(r=>r.json())
+          .then(data => {
+            historyList.innerHTML = "";
+            const ctx = document.getElementById('scanChart').getContext('2d');
+            const scanLabels = data.map(h => h.scan_id.slice(0, 5));
+            const scanCounts = data.map(h => h.summary.count);
+            if (scanChartObj) scanChartObj.destroy();
+            scanChartObj = new Chart(ctx, {
+              type: 'bar',
+              data: {
+                labels: scanLabels,
+                datasets: [{
+                  label: '# Server trovati',
+                  data: scanCounts,
+                  backgroundColor: 'rgba(99, 102, 241, 0.7)',
+                  borderColor: 'rgba(99, 102, 241, 1)',
+                  borderWidth: 2
+                }]
+              },
+              options: {
+                scales: {
+                  y: { beginAtZero: true }
+                }
+              }
+            });
+            data.forEach(h => {
+              const li = document.createElement("li");
+              li.classList = "mb-2";
+              li.innerHTML = `<button class="bg-gray-700 hover:bg-gray-900 px-3 py-1 rounded font-bold mr-2" onclick="reloadScan('${h.scan_id}')">Scan ${h.scan_id.slice(0,8)}</button>
+                <span class="text-gray-400">${h.created}</span> <span class="text-green-400 ml-2">IP trovati: ${h.summary.count}</span>`;
+              historyList.appendChild(li);
+            });
+            historyContainer.classList.remove("hidden");
+          });
+      });
+      window.reloadScan = function(scanId) {
+        fetch(`/output/output_${scanId}.json`)
+          .then(response => response.json())
+          .then(data => {
+            jobData = data;
+            showResults(jobData);
+            resultsContainer.classList.remove("hidden");
+            historyContainer.classList.add("hidden");
+            lastScanId = scanId;
+          })
+          .catch(err => showError(err));
+      };
+    });
+  </script>
+</body>
+</html>
